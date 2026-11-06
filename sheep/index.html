@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#fbf3e8">
+<title>羊了个羊</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;overflow:hidden;background:#fbf3e8;font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",system-ui,sans-serif;color:#7a5c58;-webkit-user-select:none;user-select:none;}
+#c{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block;}
+.hud{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 10px) 12px 0;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;z-index:2;}
+.title{font-size:20px;font-weight:800;letter-spacing:2px;color:#c9817a;text-shadow:0 2px 0 #fff,0 4px 10px rgba(201,129,122,.25);}
+.stats{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;}
+.pill{background:rgba(255,255,255,.78);border-radius:999px;padding:5px 12px;font-size:13px;box-shadow:0 4px 12px rgba(180,130,110,.15),inset 0 -2px 0 rgba(240,215,200,.6);white-space:nowrap;}
+.pill b{color:#d98a7e;font-size:14px;margin-left:2px;}
+.tip{font-size:12px;color:#a88a84;background:rgba(255,250,244,.7);padding:3px 12px;border-radius:999px;}
+.home{position:fixed;left:12px;top:calc(env(safe-area-inset-top) + 10px);z-index:3;text-decoration:none;font-size:12px;color:#a88a84;background:rgba(255,255,255,.8);padding:6px 12px;border-radius:999px;box-shadow:0 3px 10px rgba(180,130,110,.15);}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:0 10px calc(env(safe-area-inset-bottom) + 12px);display:flex;justify-content:center;gap:8px;flex-wrap:wrap;z-index:2;pointer-events:none;}
+.btn{pointer-events:auto;border:none;outline:none;cursor:pointer;font:inherit;font-size:13px;font-weight:700;color:#fff;padding:10px 14px;border-radius:999px;background:linear-gradient(180deg,#f6b8ae,#ec9d93);box-shadow:0 4px 0 #dc8a80,0 7px 14px rgba(220,138,128,.3);transition:transform .15s ease,box-shadow .15s ease,opacity .2s;}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 #dc8a80,0 3px 8px rgba(220,138,128,.3);}
+.btn:disabled{opacity:.4;pointer-events:none;}
+.btn.mint{background:linear-gradient(180deg,#b5e2cf,#94d0b8);box-shadow:0 4px 0 #7dbba2,0 7px 14px rgba(125,187,162,.3);}
+.btn.mint:active{box-shadow:0 1px 0 #7dbba2,0 3px 8px rgba(125,187,162,.3);}
+.btn.lav{background:linear-gradient(180deg,#d4c4f0,#bba8e6);box-shadow:0 4px 0 #a693d4,0 7px 14px rgba(166,147,212,.3);}
+.btn.lav:active{box-shadow:0 1px 0 #a693d4,0 3px 8px rgba(166,147,212,.3);}
+.btn.sky{background:linear-gradient(180deg,#b8d4e8,#98bcd8);box-shadow:0 4px 0 #7aa4c0,0 7px 14px rgba(122,164,192,.3);}
+.btn.sky:active{box-shadow:0 1px 0 #7aa4c0,0 3px 8px rgba(122,164,192,.3);}
+#overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:5;pointer-events:none;opacity:0;transition:opacity .4s ease;background:rgba(251,243,232,.45);}
+#overlay.show{opacity:1;pointer-events:auto;}
+.card{background:rgba(255,252,247,.96);border-radius:32px;padding:26px 32px 28px;text-align:center;box-shadow:0 18px 45px rgba(190,140,120,.28),inset 0 -4px 0 rgba(245,225,212,.9);transform:scale(.75) translateY(24px);transition:transform .55s cubic-bezier(.34,1.56,.64,1);min-width:240px;}
+#overlay.show .card{transform:scale(1) translateY(0);}
+.card h2{margin:0 0 6px;font-size:32px;color:#e39286;letter-spacing:3px;}
+.card.lose h2{color:#b89a90;}
+.card p{margin:4px 0;color:#a88a84;font-size:14px;}
+.card .btn{margin-top:16px;font-size:16px;padding:12px 28px;}
+</style>
+</head>
+<body>
+<a class="home" href="/">← 首页</a>
+<canvas id="c"></canvas>
+<div class="hud">
+  <div class="title">羊了个羊</div>
+  <div class="stats">
+    <div class="pill">第 <b id="lv">1</b> 关</div>
+    <div class="pill">剩余 <b id="left">0</b></div>
+  </div>
+  <div class="tip">点没有被挡住的牌，凑齐 3 个相同的就能消掉～</div>
+</div>
+<div class="bar">
+  <button class="btn lav" id="undo">撤回</button>
+  <button class="btn sky" id="shuffle">洗牌</button>
+  <button class="btn mint" id="remove">移出</button>
+  <button class="btn" id="restart">重开</button>
+</div>
+<div id="overlay"><div class="card" id="ocard">
+  <h2 id="otitle">过关！</h2>
+  <p id="ostat"></p>
+  <p id="omsg"></p>
+  <button class="btn" id="onext">下一关</button>
+</div></div>
+<script>
+(function(){
+"use strict";
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+var ICONS=[
+  {name:"草",c:["#c8d8a8","#a8c088"],draw:function(g,s){g.fillStyle="#a8c088";g.beginPath();g.moveTo(0,s*0.4);g.quadraticCurveTo(-s*0.35,-s*0.1,-s*0.15,-s*0.45);g.quadraticCurveTo(-s*0.05,-s*0.1,0,s*0.1);g.quadraticCurveTo(s*0.05,-s*0.1,s*0.15,-s*0.45);g.quadraticCurveTo(s*0.35,-s*0.1,0,s*0.4);g.fill();}},
+  {name:"花",c:["#e0c0c8","#d0a0b0"],draw:function(g,s){for(var i=0;i<5;i++){var a=i/5*Math.PI*2;g.fillStyle="#d8a8b8";g.beginPath();g.ellipse(Math.cos(a)*s*0.22,Math.sin(a)*s*0.22,s*0.16,s*0.12,a,0,Math.PI*2);g.fill();}g.fillStyle="#e8d090";g.beginPath();g.arc(0,0,s*0.12,0,Math.PI*2);g.fill();}},
+  {name:"叶",c:["#b8d0b0","#98b890"],draw:function(g,s){g.fillStyle="#a0c098";g.beginPath();g.ellipse(0,0,s*0.18,s*0.38,0.4,0,Math.PI*2);g.fill();g.strokeStyle="#88a878";g.lineWidth=s*0.03;g.beginPath();g.moveTo(-s*0.05,s*0.3);g.lineTo(s*0.05,-s*0.3);g.stroke();}},
+  {name:"云",c:["#d0dce8","#b0c4d8"],draw:function(g,s){g.fillStyle="#c0d0e0";g.beginPath();g.arc(-s*0.15,s*0.05,s*0.2,0,Math.PI*2);g.arc(s*0.15,s*0.05,s*0.2,0,Math.PI*2);g.arc(0,-s*0.1,s*0.22,0,Math.PI*2);g.fill();}},
+  {name:"月",c:["#e8dcb0","#d8c890"],draw:function(g,s){g.fillStyle="#e0d098";g.beginPath();g.arc(0,0,s*0.32,0,Math.PI*2);g.fill();g.fillStyle="#fbf3e8";g.beginPath();g.arc(s*0.12,-s*0.08,s*0.26,0,Math.PI*2);g.fill();}},
+  {name:"星",c:["#e8d8a8","#d8c088"],draw:function(g,s){g.fillStyle="#e0c890";g.beginPath();for(var i=0;i<10;i++){var a=-Math.PI/2+i*Math.PI/5,r=i%2?s*0.14:s*0.32;g[i?"lineTo":"moveTo"](Math.cos(a)*r,Math.sin(a)*r);}g.closePath();g.fill();}},
+  {name:"果",c:["#e0b8b0","#d09890"],draw:function(g,s){g.fillStyle="#d8a098";g.beginPath();g.arc(-s*0.08,s*0.05,s*0.22,0,Math.PI*2);g.arc(s*0.08,s*0.05,s*0.22,0,Math.PI*2);g.fill();g.strokeStyle="#a08878";g.lineWidth=s*0.03;g.beginPath();g.moveTo(0,-s*0.05);g.lineTo(0,-s*0.28);g.stroke();}},
+  {name:"铃",c:["#e0d0a0","#d0b880"],draw:function(g,s){g.fillStyle="#d8c088";g.beginPath();g.moveTo(-s*0.25,-s*0.1);g.quadraticCurveTo(-s*0.28,s*0.3,0,s*0.35);g.quadraticCurveTo(s*0.28,s*0.3,s*0.25,-s*0.1);g.closePath();g.fill();g.fillStyle="#c8a870";g.beginPath();g.arc(0,-s*0.18,s*0.1,0,Math.PI*2);g.fill();g.beginPath();g.arc(0,s*0.22,s*0.07,0,Math.PI*2);g.fill();}},
+  {name:"羊",c:["#e8e0d0","#d0c8b8"],draw:function(g,s){g.fillStyle="#e0d8c8";g.beginPath();g.arc(0,s*0.05,s*0.28,0,Math.PI*2);g.fill();g.beginPath();g.arc(-s*0.22,-s*0.2,s*0.12,0,Math.PI*2);g.arc(s*0.22,-s*0.2,s*0.12,0,Math.PI*2);g.fill();g.fillStyle="#6a5a50";g.beginPath();g.arc(-s*0.1,-s*0.02,s*0.04,0,Math.PI*2);g.arc(s*0.1,-s*0.02,s*0.04,0,Math.PI*2);g.fill();}},
+  {name:"奶",c:["#e8e4d8","#d0ccc0"],draw:function(g,s){g.fillStyle="#ddd8cc";g.beginPath();g.moveTo(-s*0.22,-s*0.25);g.lineTo(s*0.22,-s*0.25);g.lineTo(s*0.18,s*0.3);g.lineTo(-s*0.18,s*0.3);g.closePath();g.fill();g.fillStyle="#c8c0b0";g.fillRect(-s*0.22,-s*0.3,s*0.44,s*0.1);}},
+  {name:"萝卜",c:["#e8c8a8","#d8a888"],draw:function(g,s){g.fillStyle="#e0b088";g.beginPath();g.moveTo(0,s*0.35);g.lineTo(-s*0.18,-s*0.15);g.lineTo(s*0.18,-s*0.15);g.closePath();g.fill();g.fillStyle="#a8c088";g.beginPath();g.moveTo(-s*0.08,-s*0.15);g.quadraticCurveTo(-s*0.2,-s*0.4,0,-s*0.35);g.quadraticCurveTo(s*0.05,-s*0.2,-s*0.08,-s*0.15);g.fill();g.beginPath();g.moveTo(s*0.08,-s*0.15);g.quadraticCurveTo(s*0.2,-s*0.4,0,-s*0.32);g.fill();}},
+  {name:"蘑菇",c:["#e0b8b0","#d09890"],draw:function(g,s){g.fillStyle="#efe4d8";g.beginPath();g.ellipse(0,s*0.2,s*0.14,s*0.18,0,0,Math.PI*2);g.fill();g.fillStyle="#d8a098";g.beginPath();g.ellipse(0,-s*0.05,s*0.3,s*0.2,0,Math.PI,Math.PI*2);g.fill();g.beginPath();g.ellipse(0,0,s*0.3,s*0.1,0,0,Math.PI*2);g.fill();}}
+];
+
+function roundRect(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
+
+var cv=document.getElementById("c"),ctx=cv.getContext("2d");
+var W=0,H=0,DPR=1,TW=48,TH=54;
+var level=parseInt(localStorage.getItem("sheepLevel")||"1",10)||1;
+var tiles=[],tray=[],hold=[],history=[],flying=[],particles=[];
+var props={undo:1,shuffle:1,remove:1};
+var won=false,lost=false,dirty=true;
+var play={x:0,y:0,w:1,h:1};
+
+function levelConfig(lv){
+  var types=Math.min(12,4+Math.floor((lv-1)/2));
+  var layers=Math.min(6,2+Math.floor((lv-1)/3));
+  var perType=Math.max(3,3*Math.ceil((2+Math.floor(lv/2))/1))*1; // multiple of 3
+  // ensure total tiles reasonable
+  var sets=Math.min(6,2+Math.floor(lv/3)); // sets of 3 per type
+  return {types:types,layers:layers,sets:sets};
+}
+
+function generateLevel(lv){
+  var cfg=levelConfig(lv),rnd=mulberry32(lv*7919+17);
+  var typeCount=cfg.types;
+  var pool=[];
+  for(var t=0;t<typeCount;t++)for(var s=0;s<cfg.sets;s++)for(var k=0;k<3;k++)pool.push(t);
+  for(var i=pool.length-1;i>0;i--){var j=Math.floor(rnd()*(i+1));var tmp=pool[i];pool[i]=pool[j];pool[j]=tmp;}
+
+  var list=[],idx=0;
+  var layers=cfg.layers;
+  // Shared grid so upper layers sit on top of lower ones (classic stack)
+  var cols=Math.min(7,4+Math.floor((lv-1)/4));
+  var rows=Math.min(7,4+Math.floor((lv-1)/4));
+  function cellPos(c,r,L){
+    var ox=(L%2)*0.42, oy=(Math.floor(L/2)%2)*0.38;
+    var nx=(c+ox)/(cols-0.2);
+    var ny=(r+oy)/(rows-0.2);
+    return {nx:0.06+nx*0.88*(cols/(cols+ox)), ny:0.04+ny*0.92*(rows/(rows+oy))};
+  }
+  for(var L=0;L<layers&&idx<pool.length;L++){
+    var positions=[];
+    for(var r=0;r<rows;r++)for(var c=0;c<cols;c++){
+      // shrink higher layers toward center
+      var margin=Math.floor(L*0.4);
+      if(c<margin||r<margin||c>=cols-margin||r>=rows-margin)continue;
+      positions.push({c:c,r:r});
+    }
+    if(!positions.length){
+      for(r=1;r<rows-1;r++)for(c=1;c<cols-1;c++)positions.push({c:c,r:r});
+    }
+    for(i=positions.length-1;i>0;i--){j=Math.floor(rnd()*(i+1));tmp=positions[i];positions[i]=positions[j];positions[j]=tmp;}
+    // bottom layer nearly full; upper layers denser overlap (~70-95%)
+    var ratio=L===0?0.95:(0.7+rnd()*0.25);
+    var use=Math.max(3,Math.min(positions.length,Math.floor(positions.length*ratio),pool.length-idx));
+    // keep remaining divisible-ish by preferring to leave multiples of 3 for later
+    for(i=0;i<use&&idx<pool.length;i++){
+      var p=positions[i], pos=cellPos(p.c,p.r,L);
+      list.push({
+        id:list.length,type:pool[idx++],layer:L,
+        nx:Math.max(0.05,Math.min(0.95,pos.nx+(rnd()-0.5)*0.015)),
+        ny:Math.max(0.04,Math.min(0.96,pos.ny+(rnd()-0.5)*0.015)),
+        gone:false,fly:null
+      });
+    }
+  }
+  // leftovers stacked near center on top layer with tight jitter (creates cover)
+  while(idx<pool.length){
+    var ang=rnd()*Math.PI*2, rad=0.08+rnd()*0.28;
+    list.push({
+      id:list.length,type:pool[idx++],layer:layers+Math.floor((pool.length-idx)/8),
+      nx:0.5+Math.cos(ang)*rad+(rnd()-0.5)*0.04,
+      ny:0.48+Math.sin(ang)*rad*0.85+(rnd()-0.5)*0.04,
+      gone:false,fly:null
+    });
+  }
+  return list;
+}
+
+function tileRect(t){
+  return {
+    x:play.x+t.nx*play.w-TW/2,
+    y:play.y+t.ny*play.h-TH/2,
+    w:TW,h:TH
+  };
+}
+
+function covers(a,b){
+  // does a cover b? a must be higher layer
+  if(a.layer<=b.layer||a.gone||b.gone)return false;
+  var ra=tileRect(a),rb=tileRect(b);
+  var overlapX=Math.min(ra.x+ra.w,rb.x+rb.w)-Math.max(ra.x,rb.x);
+  var overlapY=Math.min(ra.y+ra.h,rb.y+rb.h)-Math.max(ra.y,rb.y);
+  if(overlapX<=0||overlapY<=0)return false;
+  var area=overlapX*overlapY;
+  return area>TW*TH*0.12;
+}
+
+function isFree(t){
+  if(t.gone||t.fly)return false;
+  for(var i=0;i<tiles.length;i++){
+    if(tiles[i]!==t&&covers(tiles[i],t))return false;
+  }
+  return true;
+}
+
+function resize(){
+  DPR=Math.min(window.devicePixelRatio||1,2.5);
+  W=window.innerWidth;H=window.innerHeight;
+  cv.width=Math.floor(W*DPR);cv.height=Math.floor(H*DPR);
+  cv.style.width=W+"px";cv.style.height=H+"px";
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  var topPad=105,botPad=155;
+  play={x:8,y:topPad,w:W-16,h:H-topPad-botPad};
+  TW=Math.max(40,Math.min(54,Math.floor(Math.min(play.w,play.h)/8)));
+  TH=Math.floor(TW*1.12);
+  dirty=true;
+}
+
+function updateButtons(){
+  document.getElementById("undo").disabled=!props.undo||history.length===0;
+  document.getElementById("shuffle").disabled=!props.shuffle;
+  document.getElementById("remove").disabled=!props.remove||tray.length===0;
+  document.getElementById("undo").textContent="撤回"+(props.undo?"":" ✓");
+  document.getElementById("shuffle").textContent="洗牌"+(props.shuffle?"":" ✓");
+  document.getElementById("remove").textContent="移出"+(props.remove?"":" ✓");
+}
+
+function updateLeft(){
+  var n=0;for(var i=0;i<tiles.length;i++)if(!tiles[i].gone)n++;
+  n+=hold.length;
+  document.getElementById("left").textContent=n+tray.length;
+}
+
+function startLevel(lv){
+  level=lv;localStorage.setItem("sheepLevel",String(level));
+  document.getElementById("lv").textContent=level;
+  tiles=generateLevel(level);tray=[];hold=[];history=[];flying=[];particles=[];
+  props={undo:1,shuffle:1,remove:1};
+  won=false;lost=false;
+  document.getElementById("overlay").classList.remove("show");
+  updateButtons();updateLeft();dirty=true;
+}
+
+function trayLayout(){
+  var n=7,gap=5,sw=Math.min(46,(W-36-gap*6)/7),total=n*sw+(n-1)*gap;
+  return {sw:sw,gap:gap,sx:(W-total)/2,sy:H-145,sh:Math.floor(sw*1.15)};
+}
+
+function holdLayout(){
+  var gap=5,sw=Math.min(40,(W-40)/5),n=Math.max(hold.length,3);
+  var total=hold.length*sw+(Math.max(0,hold.length-1))*gap;
+  return {sw:sw,gap:gap,sx:(W-total)/2,sy:H-200,sh:Math.floor(sw*1.15)};
+}
+
+function regroupTray(){
+  var groups=[],map={};
+  for(var i=0;i<tray.length;i++){
+    var t=tray[i];
+    if(map[t.type]==null){map[t.type]=groups.length;groups.push([]);}
+    groups[map[t.type]].push(t);
+  }
+  tray=[];
+  for(i=0;i<groups.length;i++)for(var j=0;j<groups[i].length;j++)tray.push(groups[i][j]);
+}
+
+function tryEliminate(){
+  regroupTray();
+  var i=0;
+  while(i<tray.length){
+    var t=tray[i].type,j=i;
+    while(j<tray.length&&tray[j].type===t)j++;
+    if(j-i>=3){
+      var rem=tray.splice(i,3);
+      var tl=trayLayout();
+      for(var k=0;k<rem.length;k++){
+        for(var p=0;p<6;p++)particles.push({x:tl.sx+(i+k)*(tl.sw+tl.gap)+tl.sw/2,y:tl.sy+tl.sh/2,vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*4-1,life:1,c:ICONS[rem[k].type].c[0]});
+      }
+      updateLeft();
+      continue;
+    }
+    i=j;
+  }
+}
+
+function checkWinLose(){
+  if(won||lost)return;
+  var left=0;for(var i=0;i<tiles.length;i++)if(!tiles[i].gone)left++;
+  if(left===0&&flying.length===0&&tray.length===0&&hold.length===0){
+    won=true;showOverlay(true);return;
+  }
+  if(tray.length>=7&&flying.length===0){
+    lost=true;showOverlay(false);
+  }
+}
+
+function showOverlay(win){
+  document.getElementById("otitle").textContent=win?"过关！":"差一点～";
+  document.getElementById("ostat").textContent=win?("第 "+level+" 关完成"):"槽位满啦";
+  document.getElementById("omsg").textContent=win?"羊了个羊，真棒～":"用道具再试一次吧～";
+  document.getElementById("onext").textContent=win?"下一关":"再试一次";
+  document.getElementById("ocard").className=win?"card":"card lose";
+  document.getElementById("overlay").classList.add("show");
+}
+
+function pickTile(t){
+  if(won||lost||!isFree(t))return;
+  if(tray.length+flying.length>=7)return;
+  var r=tileRect(t);
+  var tl=trayLayout();
+  var idx=tray.length+flying.length;
+  var fly={sx:r.x+r.w/2,sy:r.y+r.h/2,x:r.x+r.w/2,y:r.y+r.h/2,
+    tx:tl.sx+Math.min(idx,6)*(tl.sw+tl.gap)+tl.sw/2,ty:tl.sy+tl.sh/2,
+    t:0,type:t.type,from:"board",tile:t};
+  t.gone=true;t.fly=fly;flying.push(fly);
+  history.push({action:"pick",tile:t,type:t.type});
+  updateLeft();updateButtons();dirty=true;
+}
+
+function pickHold(idx){
+  if(won||lost)return;
+  if(tray.length+flying.length>=7)return;
+  var h=hold[idx];if(!h)return;
+  var hl=holdLayout();
+  var tl=trayLayout();
+  var tidx=tray.length+flying.length;
+  var fly={sx:hl.sx+idx*(hl.sw+hl.gap)+hl.sw/2,sy:hl.sy+hl.sh/2,
+    x:0,y:0,tx:tl.sx+Math.min(tidx,6)*(tl.sw+tl.gap)+tl.sw/2,ty:tl.sy+tl.sh/2,
+    t:0,type:h.type,from:"hold",holdIdx:idx};
+  fly.x=fly.sx;fly.y=fly.sy;
+  hold.splice(idx,1);
+  flying.push(fly);
+  history.push({action:"pickHold",type:h.type});
+  updateLeft();updateButtons();dirty=true;
+}
+
+function doUndo(){
+  if(!props.undo||!history.length||won||lost||flying.length)return;
+  props.undo=0;
+  var last=history.pop();
+  if(last.action==="pick"){
+    // remove from tray
+    for(var i=tray.length-1;i>=0;i--){
+      if(tray[i].type===last.type&&tray[i].tileId===last.tile.id){tray.splice(i,1);break;}
+      if(tray[i].type===last.type){tray.splice(i,1);break;}
+    }
+    last.tile.gone=false;last.tile.fly=null;
+  }else if(last.action==="pickHold"){
+    for(i=tray.length-1;i>=0;i--){if(tray[i].type===last.type){tray.splice(i,1);break;}}
+    hold.push({type:last.type});
+  }else if(last.action==="remove"){
+    // put back from hold to tray - complex; skip reverse of remove for simplicity by restoring snapshot
+  }
+  updateLeft();updateButtons();dirty=true;
+}
+
+function doShuffle(){
+  if(!props.shuffle||won||lost)return;
+  props.shuffle=0;
+  var remaining=tiles.filter(function(t){return !t.gone;});
+  var types=remaining.map(function(t){return t.type;});
+  var rnd=mulberry32(Date.now()%100000+level*13);
+  for(var i=types.length-1;i>0;i--){var j=Math.floor(rnd()*(i+1));var tmp=types[i];types[i]=types[j];types[j]=tmp;}
+  for(i=0;i<remaining.length;i++)remaining[i].type=types[i];
+  updateButtons();dirty=true;
+}
+
+function doRemove(){
+  if(!props.remove||won||lost||tray.length===0||flying.length)return;
+  props.remove=0;
+  var n=Math.min(3,tray.length);
+  var moved=tray.splice(0,n);
+  for(var i=0;i<moved.length;i++)hold.push({type:moved[i].type});
+  history.push({action:"remove",moved:moved});
+  updateLeft();updateButtons();dirty=true;
+}
+
+function hitTest(x,y){
+  // check hold first
+  if(hold.length){
+    var hl=holdLayout();
+    for(var i=0;i<hold.length;i++){
+      var hx=hl.sx+i*(hl.sw+hl.gap),hy=hl.sy;
+      if(x>=hx&&x<=hx+hl.sw&&y>=hy&&y<=hy+hl.sh)return {kind:"hold",idx:i};
+    }
+  }
+  // tiles topmost free first
+  var cands=tiles.filter(function(t){return !t.gone&&isFree(t);});
+  cands.sort(function(a,b){return b.layer-a.layer;});
+  for(i=0;i<cands.length;i++){
+    var r=tileRect(cands[i]);
+    if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h)return {kind:"tile",tile:cands[i]};
+  }
+  // also allow clicking covered? no
+  return null;
+}
+
+function onPointer(e){
+  e.preventDefault();
+  if(won||lost)return;
+  var x,y;
+  if(e.touches&&e.touches.length){x=e.touches[0].clientX;y=e.touches[0].clientY;}
+  else{x=e.clientX;y=e.clientY;}
+  var hit=hitTest(x,y);
+  if(!hit)return;
+  if(hit.kind==="tile")pickTile(hit.tile);
+  else if(hit.kind==="hold")pickHold(hit.idx);
+}
+
+function drawTileFace(type,x,y,w,h,dim){
+  ctx.save();
+  // soft shadow
+  ctx.fillStyle="rgba(160,120,100,.16)";
+  roundRect(ctx,x+2,y+3,w,h,10);ctx.fill();
+  // cream tile
+  var grd=ctx.createLinearGradient(x,y,x,y+h);
+  grd.addColorStop(0,"#fffaf6");grd.addColorStop(1,"#f3e8dc");
+  ctx.fillStyle=grd;
+  roundRect(ctx,x,y,w,h,10);ctx.fill();
+  ctx.strokeStyle=dim?"rgba(200,180,170,.35)":"rgba(220,195,180,.7)";
+  ctx.lineWidth=1.5;roundRect(ctx,x,y,w,h,10);ctx.stroke();
+  // icon
+  ctx.translate(x+w/2,y+h/2);
+  if(dim)ctx.globalAlpha=0.45;
+  ICONS[type%ICONS.length].draw(ctx,Math.min(w,h));
+  ctx.restore();
+  if(dim){
+    ctx.fillStyle="rgba(180,160,150,.28)";
+    roundRect(ctx,x,y,w,h,10);ctx.fill();
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle="rgba(255,250,244,.5)";
+  roundRect(ctx,play.x,play.y,play.w,play.h,20);ctx.fill();
+
+  var sorted=tiles.filter(function(t){return !t.gone;}).slice();
+  sorted.sort(function(a,b){return a.layer-b.layer||a.ny-b.ny||a.nx-b.nx;});
+  for(var i=0;i<sorted.length;i++){
+    var t=sorted[i],r=tileRect(t),free=isFree(t);
+    drawTileFace(t.type,r.x,r.y,r.w,r.h,!free);
+  }
+
+  // flying
+  for(i=0;i<flying.length;i++){
+    var f=flying[i];
+    var tl=trayLayout();
+    drawTileFace(f.type,f.x-tl.sw/2,f.y-tl.sh/2,tl.sw,tl.sh,false);
+  }
+
+  // hold area
+  if(hold.length){
+    var hl=holdLayout();
+    ctx.fillStyle="rgba(255,255,255,.55)";
+    roundRect(ctx,hl.sx-8,hl.sy-6,hold.length*(hl.sw+hl.gap)-hl.gap+16,hl.sh+12,14);ctx.fill();
+    for(i=0;i<hold.length;i++){
+      drawTileFace(hold[i].type,hl.sx+i*(hl.sw+hl.gap),hl.sy,hl.sw,hl.sh,false);
+    }
+  }
+
+  // tray
+  var tl=trayLayout();
+  ctx.fillStyle="rgba(255,255,255,.78)";
+  roundRect(ctx,tl.sx-10,tl.sy-8,7*(tl.sw+tl.gap)-tl.gap+20,tl.sh+16,18);ctx.fill();
+  ctx.strokeStyle="rgba(220,190,175,.5)";ctx.lineWidth=1.5;
+  roundRect(ctx,tl.sx-10,tl.sy-8,7*(tl.sw+tl.gap)-tl.gap+20,tl.sh+16,18);ctx.stroke();
+  for(i=0;i<7;i++){
+    var sx=tl.sx+i*(tl.sw+tl.gap);
+    ctx.fillStyle="rgba(245,230,220,.5)";
+    roundRect(ctx,sx,tl.sy,tl.sw,tl.sh,10);ctx.fill();
+  }
+  for(i=0;i<tray.length;i++){
+    drawTileFace(tray[i].type,tl.sx+i*(tl.sw+tl.gap),tl.sy,tl.sw,tl.sh,false);
+  }
+
+  for(i=0;i<particles.length;i++){
+    var p=particles[i];
+    ctx.globalAlpha=p.life*0.8;ctx.fillStyle=p.c;
+    ctx.beginPath();ctx.arc(p.x,p.y,3.5*p.life,0,Math.PI*2);ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+function tick(){
+  var need=false;
+  for(var i=flying.length-1;i>=0;i--){
+    var f=flying[i];
+    f.t+=0.08;
+    var tl=trayLayout();
+    var idx=tray.length+i;
+    f.tx=tl.sx+Math.min(idx,6)*(tl.sw+tl.gap)+tl.sw/2;
+    f.ty=tl.sy+tl.sh/2;
+    if(f.t>=1){
+      tray.push({type:f.type,tileId:f.tile?f.tile.id:-1});
+      flying.splice(i,1);
+      tryEliminate();
+      checkWinLose();
+      updateButtons();
+      need=true;
+    }else{
+      var e=1-Math.pow(1-f.t,2.5);
+      f.x=f.sx+(f.tx-f.sx)*e;
+      f.y=f.sy+(f.ty-f.sy)*e-Math.sin(e*Math.PI)*36;
+      need=true;
+    }
+  }
+  for(i=particles.length-1;i>=0;i--){
+    var p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;p.life-=0.04;
+    if(p.life<=0)particles.splice(i,1);need=true;
+  }
+  if(need||dirty){draw();dirty=false;}
+  requestAnimationFrame(tick);
+}
+
+document.getElementById("restart").addEventListener("click",function(){startLevel(level);});
+document.getElementById("undo").addEventListener("click",doUndo);
+document.getElementById("shuffle").addEventListener("click",doShuffle);
+document.getElementById("remove").addEventListener("click",doRemove);
+document.getElementById("onext").addEventListener("click",function(){
+  if(won)startLevel(level+1);else startLevel(level);
+});
+cv.addEventListener("mousedown",onPointer,{passive:false});
+cv.addEventListener("touchstart",onPointer,{passive:false});
+window.addEventListener("resize",function(){resize();draw();});
+
+
+window.SheepGame={
+  get tiles(){return tiles;}, set tiles(v){tiles=v;},
+  get tray(){return tray;}, set tray(v){tray=v;},
+  get hold(){return hold;}, set hold(v){hold=v;},
+  get flying(){return flying;}, set flying(v){flying=v;},
+  get history(){return history;}, set history(v){history=v;},
+  get props(){return props;}, set props(v){props=v;},
+  get won(){return won;}, set won(v){won=v;},
+  get lost(){return lost;}, set lost(v){lost=v;},
+  get level(){return level;},
+  isFree:isFree, tileRect:tileRect, tryEliminate:tryEliminate, checkWinLose:checkWinLose,
+  updateLeft:updateLeft, updateButtons:updateButtons, startLevel:startLevel,
+  set dirty(v){dirty=v;}
+};
+
+resize();
+startLevel(level);
+draw();
+requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
